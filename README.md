@@ -35,6 +35,18 @@ I'm stating this plainly rather than writing this document as if I typed
 every line myself, because I think that would be a worse answer to "who
 wrote this" than the true one.
 
+To directly answer the question the brief asks about this specific
+document: the brief requires the README to be human-written, and I want
+to be precise about what that meant in practice here rather than leave it
+ambiguous. The reasoning in this README, the decisions it explains, and
+the numbers it cites are mine, checked against the actual code and the
+actual files in artifacts/. But I drafted the sentences with Claude's
+help rather than typing every line from a blank page, the same way I used
+it for the code. If asked directly in the interview whether I typed this
+document character by character myself, the honest answer is no, and I'd
+rather say that here than have the answer feel like it contradicts this
+section when it's asked out loud.
+
 No third-party recommendation library, pretrained model or vector
 database was used. The only dependencies are standard, widely used
 open-source libraries: PyTorch, FastAPI, pandas, NumPy, scikit-learn and
