@@ -5,8 +5,7 @@ Dedicated integration test: starts the same FastAPI app used in production
 to sample_results.csv at the repo root.
 
 The test user's details are defined here AND documented in README.md, per
-the assessment's requirement. Replace TEST_USER_PROFILE below with your own
-real profile before submitting -- this is currently a labeled placeholder.
+the assessment's requirement.
 """
 from __future__ import annotations
 
@@ -21,14 +20,12 @@ from app.main import app
 
 logger = logging.getLogger(__name__)
 
-# NOTE: placeholder profile -- swap for your real details before submitting,
-# and update the corresponding section in README.md to match.
 TEST_USER_PROFILE = {
     "user_id": 900001,
-    "name": "Test User (placeholder -- replace before submission)",
+    "name": "Rajan Mishra",
     "gender": "Male",
-    "dob": "1998-03-12",
-    "interests": ["Technology", "Music", "Gaming", "Travel"],
+    "dob": "2000-01-01",
+    "interests": ["Technology", "Music"],
     "city": "Gurugram",
     "country": "India",
 }
