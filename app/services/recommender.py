@@ -7,31 +7,29 @@ from app.schemas.recommendation import (
     RecommendationResponse,
     UserProfileRequest,
 )
-from app.services.features import UserFeatures, age_from_dob, interest_multi_hot
+from app.services.features import UserFeatures
 from app.services.ranker_inference import rank_top_k
 from app.services.user_store import UserStore
-
-
-def profile_to_user_features(profile: UserProfileRequest) -> UserFeatures:
-    return UserFeatures(
-        user_id=profile.user_id,
-        name=profile.name,
-        gender=profile.gender,
-        age=age_from_dob(profile.dob),
-        city=profile.city,
-        country=profile.country,
-        interests=profile.interests,
-        interest_vector=interest_multi_hot(profile.interests),
-    )
 
 
 def get_recommendations(
     profile: UserProfileRequest,
     store: UserStore,
     model: PairwiseRanker,
-    top_k: int = settings.final_recommendation_count,
+    top_k: int | None = None,
 ) -> RecommendationResponse:
-    target = profile_to_user_features(profile)
+    if top_k is None:
+        top_k = settings.final_recommendation_count
+
+    target = UserFeatures.from_profile(
+        user_id=profile.user_id,
+        name=profile.name,
+        gender=profile.gender,
+        dob=profile.dob,
+        interests=profile.interests,
+        city=profile.city,
+        country=profile.country,
+    )
     candidates = store.retriever.retrieve(target)
     ranked = rank_top_k(model, target, candidates, k=top_k)
 

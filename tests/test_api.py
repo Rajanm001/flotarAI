@@ -50,3 +50,45 @@ def test_recommendations_rejects_empty_interests(client):
     }
     response = client.post("/recommendations", json=payload)
     assert response.status_code == 422
+
+
+def test_recommendations_rejects_unknown_interest(client):
+    payload = {
+        "user_id": 900004,
+        "name": "Bad Interest",
+        "gender": "Male",
+        "dob": "1990-01-01",
+        "interests": ["NotARealInterest"],
+        "city": "London",
+        "country": "United Kingdom",
+    }
+    response = client.post("/recommendations", json=payload)
+    assert response.status_code == 422
+
+
+def test_recommendations_rejects_blank_interest_string(client):
+    payload = {
+        "user_id": 900005,
+        "name": "Blank Interest",
+        "gender": "Male",
+        "dob": "1990-01-01",
+        "interests": [""],
+        "city": "London",
+        "country": "United Kingdom",
+    }
+    response = client.post("/recommendations", json=payload)
+    assert response.status_code == 422
+
+
+def test_recommendations_rejects_malformed_dob(client):
+    payload = {
+        "user_id": 900006,
+        "name": "Bad Dob",
+        "gender": "Male",
+        "dob": "not-a-date",
+        "interests": ["Music"],
+        "city": "London",
+        "country": "United Kingdom",
+    }
+    response = client.post("/recommendations", json=payload)
+    assert response.status_code == 422

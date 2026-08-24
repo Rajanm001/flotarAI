@@ -87,6 +87,37 @@ def is_relevant_batch(
     return rng.random(size=prob.shape) < prob
 
 
+def relevance_signals(
+    target: UserFeatures,
+    candidate_interest_bool: np.ndarray,
+    candidate_cities: np.ndarray,
+    candidate_countries: np.ndarray,
+    candidate_ages: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Single vectorized source of truth for (jaccard, same_country, same_city,
+    age_diff, rare_bonus) against a target user, given a candidate population
+    already cast to bool interest vectors. Used identically whether the
+    "candidate population" is a retrieved pool (~100 rows) or the entire
+    dataset (~25k rows) -- callers differ only in which arrays they pass in,
+    not in how the signals are computed, so the two can't silently drift
+    apart the way two independently hand-written copies could.
+    """
+    target_interest = target.interest_vector.astype(bool)
+    intersection = np.logical_and(candidate_interest_bool, target_interest).sum(axis=1)
+    union = np.logical_or(candidate_interest_bool, target_interest).sum(axis=1)
+    jaccard = np.divide(
+        intersection, union, out=np.zeros_like(intersection, dtype=np.float32), where=union != 0
+    )
+    same_country = (candidate_countries == target.country).astype(np.float32)
+    same_city = (candidate_cities == target.city).astype(np.float32)
+    age_diff = np.abs(candidate_ages - target.age).astype(np.float32)
+    rare_bonus = (
+        np.logical_and(candidate_interest_bool, target_interest).astype(np.float32) @ RARITY_VECTOR
+    )
+    return jaccard, same_country, same_city, age_diff, rare_bonus
+
+
 def relevance_probability_batch(
     jaccard: np.ndarray,
     same_country: np.ndarray,

@@ -6,6 +6,7 @@ __pycache__/
 artifacts/*.pt
 artifacts/*.pth
 artifacts/*.joblib
+artifacts/*.json
 !artifacts/.gitkeep
 !artifacts/eval_metrics.json
 

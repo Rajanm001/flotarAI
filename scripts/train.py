@@ -9,11 +9,9 @@ user id split this script reads from data/processed/user_split.json.
 """
 from __future__ import annotations
 
-import json
 import logging
 
 import numpy as np
-import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -21,19 +19,11 @@ from torch.utils.data import DataLoader, TensorDataset
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.models.ranker import PairwiseRanker
-from app.services.features import build_user_features
 from app.services.pairs import build_training_pairs
 from app.services.retrieval import CandidateRetriever
+from app.services.user_store import load_split_users
 
 logger = logging.getLogger(__name__)
-
-
-def load_split_users():
-    df = pd.read_csv(settings.processed_dir / "users.csv")
-    split = json.loads((settings.processed_dir / "user_split.json").read_text())
-
-    all_users = {u.user_id: u for u in (build_user_features(row) for _, row in df.iterrows())}
-    return all_users, split
 
 
 def make_loader(features: np.ndarray, labels: np.ndarray, batch_size: int, shuffle: bool) -> DataLoader:

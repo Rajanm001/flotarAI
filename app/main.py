@@ -29,8 +29,18 @@ async def lifespan(app: FastAPI):
             f"Trained model not found at {model_path}. Run `python -m scripts.train` first."
         )
 
-    app.state.user_store = UserStore.from_csv()
-    app.state.ranker_model = load_ranker(model_path)
+    try:
+        app.state.user_store = UserStore.from_csv()
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to load user pool from {settings.raw_dataset_path}: {exc}"
+        ) from exc
+
+    try:
+        app.state.ranker_model = load_ranker(model_path)
+    except Exception as exc:
+        raise RuntimeError(f"Failed to load trained model from {model_path}: {exc}") from exc
+
     logger.info("Startup complete.")
     yield
 

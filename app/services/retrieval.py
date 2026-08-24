@@ -1,8 +1,29 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from app.services.features import UserFeatures, jaccard_similarity
+
+
+@dataclass(frozen=True)
+class PopulationArrays:
+    """
+    Public, read-only view of the retriever's precomputed per-user arrays.
+
+    Exposed as a stable accessor (rather than callers reaching into
+    CandidateRetriever's underscore-prefixed attributes directly) so
+    downstream consumers -- training pair generation, offline evaluation --
+    depend on an explicit contract instead of the retriever's private
+    representation, which is free to change without breaking them.
+    """
+
+    interest_matrix: np.ndarray
+    ages: np.ndarray
+    cities: np.ndarray
+    countries: np.ndarray
+    genders: np.ndarray
 
 
 class CandidateRetriever:
@@ -62,3 +83,13 @@ class CandidateRetriever:
     def retrieve(self, target: UserFeatures) -> list[UserFeatures]:
         top_indices = self.retrieve_indices(target)
         return [self.users[i] for i in top_indices]
+
+    def population_arrays(self) -> PopulationArrays:
+        """Stable, public accessor for the retriever's precomputed population arrays."""
+        return PopulationArrays(
+            interest_matrix=self._interest_matrix,
+            ages=self._ages,
+            cities=self._cities,
+            countries=self._countries,
+            genders=self._genders,
+        )

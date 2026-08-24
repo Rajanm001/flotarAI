@@ -9,107 +9,112 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 
 from app.core.config import settings
 from app.core.logging import configure_logging
-from app.services.features import build_user_features
-from app.services.labeling import RARITY_VECTOR, is_relevant_batch
+from app.models.ranker import PairwiseRanker
+from app.services.features import UserFeatures
+from app.services.labeling import is_relevant_batch, relevance_signals
 from app.services.metrics import ranking_metrics
 from app.services.ranker_inference import load_ranker, score_candidates
-from app.services.retrieval import CandidateRetriever
+from app.services.retrieval import CandidateRetriever, PopulationArrays
+from app.services.user_store import load_split_users
 
 logger = logging.getLogger(__name__)
 
 
-def main(max_test_targets: int = 1000, seed: int = 123) -> None:
-    configure_logging()
-    df = pd.read_csv(settings.processed_dir / "users.csv")
-    split = json.loads((settings.processed_dir / "user_split.json").read_text())
-
-    all_users = {u.user_id: u for u in (build_user_features(row) for _, row in df.iterrows())}
-    all_user_list = list(all_users.values())
-    retriever = CandidateRetriever(all_user_list, pool_size=settings.candidate_pool_size)
+def load_test_users(max_test_targets: int, seed: int) -> tuple[dict[int, UserFeatures], list[int]]:
+    all_users, split = load_split_users()
 
     test_ids = split["test"]
     rng = np.random.default_rng(seed)
     if len(test_ids) > max_test_targets:
         test_ids = [test_ids[i] for i in rng.choice(len(test_ids), max_test_targets, replace=False)]
+    return all_users, test_ids
+
+
+@dataclass(frozen=True)
+class UserEvalResult:
+    ranking_metrics: dict[str, float]
+    latency_ms: float
+    retrieval_recall: float | None
+
+
+def evaluate_one_user(
+    target: UserFeatures,
+    retriever: CandidateRetriever,
+    model: PairwiseRanker,
+    population: PopulationArrays,
+    population_interest_bool: np.ndarray,
+    label_rng: np.random.Generator,
+) -> UserEvalResult:
+    t0 = time.perf_counter()
+    pool_indices = retriever.retrieve_indices(target)
+    candidates = [retriever.users[i] for i in pool_indices]
+    scores = score_candidates(model, target, candidates)
+    latency_ms = (time.perf_counter() - t0) * 1000
+
+    order = np.argsort(-scores)
+    ranked_candidates = [candidates[i] for i in order]
+    ranked_interest_bool = np.stack([c.interest_vector for c in ranked_candidates]).astype(bool)
+    ranked_cities = np.array([c.city for c in ranked_candidates])
+    ranked_countries = np.array([c.country for c in ranked_candidates])
+    ranked_ages = np.array([c.age for c in ranked_candidates], dtype=np.float32)
+
+    jaccard, same_country, same_city, age_diff, rare_bonus = relevance_signals(
+        target, ranked_interest_bool, ranked_cities, ranked_countries, ranked_ages
+    )
+    relevant = is_relevant_batch(jaccard, same_country, same_city, age_diff, rare_bonus, label_rng)
+    metrics = ranking_metrics(relevant.astype(np.float32), k=settings.final_recommendation_count)
+
+    # Candidate-generation recall: of all "relevant" users across the entire
+    # dataset (not just the retrieved pool), what fraction did Stage A
+    # actually surface into its top-100? Measured against the whole
+    # population, unlike the ranking metrics above which are pool-scoped.
+    full_jaccard, full_same_country, full_same_city, full_age_diff, full_rare_bonus = relevance_signals(
+        target, population_interest_bool, population.cities, population.countries, population.ages
+    )
+    full_relevant = is_relevant_batch(
+        full_jaccard, full_same_country, full_same_city, full_age_diff, full_rare_bonus, label_rng
+    )
+    total_relevant_in_dataset = int(full_relevant.sum())
+    retrieval_recall = None
+    if total_relevant_in_dataset > 0:
+        relevant_in_pool = int(full_relevant[pool_indices].sum())
+        retrieval_recall = relevant_in_pool / total_relevant_in_dataset
+
+    return UserEvalResult(ranking_metrics=metrics, latency_ms=latency_ms, retrieval_recall=retrieval_recall)
+
+
+def main(max_test_targets: int = 1000, seed: int = 123) -> None:
+    configure_logging()
+    all_users, test_ids = load_test_users(max_test_targets, seed)
+    all_user_list = list(all_users.values())
+    retriever = CandidateRetriever(all_user_list, pool_size=settings.candidate_pool_size)
+    population = retriever.population_arrays()
+    population_interest_bool = population.interest_matrix.astype(bool)
 
     model = load_ranker()
-
     label_rng = np.random.default_rng(seed)
-    per_user_metrics = []
-    retrieval_recalls = []
-    latencies_ms = []
 
-    candidate_matrix = retriever._interest_matrix
-    candidate_ages = retriever._ages
-    candidate_cities = retriever._cities
-    candidate_countries = retriever._countries
+    results = [
+        evaluate_one_user(all_users[uid], retriever, model, population, population_interest_bool, label_rng)
+        for uid in test_ids
+    ]
 
-    for uid in test_ids:
-        target = all_users[uid]
+    metric_keys = results[0].ranking_metrics.keys()
+    aggregated = {
+        key: float(np.mean([r.ranking_metrics[key] for r in results])) for key in metric_keys
+    }
+    latencies_ms = [r.latency_ms for r in results]
+    recalls = [r.retrieval_recall for r in results if r.retrieval_recall is not None]
 
-        t0 = time.perf_counter()
-        pool_indices = retriever.retrieve_indices(target)
-        candidates = [all_user_list[i] for i in pool_indices]
-        scores = score_candidates(model, target, candidates)
-        elapsed_ms = (time.perf_counter() - t0) * 1000
-        latencies_ms.append(elapsed_ms)
-
-        order = np.argsort(-scores)
-        ranked_candidates = [candidates[i] for i in order]
-
-        target_interest = target.interest_vector.astype(bool)
-        jaccard_arr = np.array([
-            float(np.logical_and(target_interest, c.interest_vector.astype(bool)).sum())
-            / max(1, np.logical_or(target_interest, c.interest_vector.astype(bool)).sum())
-            for c in ranked_candidates
-        ], dtype=np.float32)
-        same_country_arr = np.array([1.0 if c.country == target.country else 0.0 for c in ranked_candidates], dtype=np.float32)
-        same_city_arr = np.array([1.0 if c.city == target.city else 0.0 for c in ranked_candidates], dtype=np.float32)
-        age_diff_arr = np.array([abs(c.age - target.age) for c in ranked_candidates], dtype=np.float32)
-        rare_bonus_arr = np.array([
-            float((np.logical_and(target_interest, c.interest_vector.astype(bool)).astype(np.float32) * RARITY_VECTOR).sum())
-            for c in ranked_candidates
-        ], dtype=np.float32)
-
-        relevant = is_relevant_batch(jaccard_arr, same_country_arr, same_city_arr, age_diff_arr, rare_bonus_arr, label_rng)
-        per_user_metrics.append(ranking_metrics(relevant.astype(np.float32), k=settings.final_recommendation_count))
-
-        # Candidate-generation recall: of all "relevant" users across the
-        # *entire* dataset (not just the retrieved pool), what fraction did
-        # Stage A actually surface into its top-100? This is measured
-        # against the whole population, unlike the ranking metrics above
-        # which are computed only within the already-retrieved pool.
-        full_jaccard = np.divide(
-            np.logical_and(candidate_matrix.astype(bool), target_interest).sum(axis=1),
-            np.logical_or(candidate_matrix.astype(bool), target_interest).sum(axis=1),
-            out=np.zeros(len(all_user_list), dtype=np.float32),
-            where=np.logical_or(candidate_matrix.astype(bool), target_interest).sum(axis=1) != 0,
-        )
-        full_same_country = (candidate_countries == target.country).astype(np.float32)
-        full_same_city = (candidate_cities == target.city).astype(np.float32)
-        full_age_diff = np.abs(candidate_ages - target.age).astype(np.float32)
-        full_rare_bonus = (
-            np.logical_and(candidate_matrix.astype(bool), target_interest).astype(np.float32) @ RARITY_VECTOR
-        )
-        full_relevant = is_relevant_batch(
-            full_jaccard, full_same_country, full_same_city, full_age_diff, full_rare_bonus, label_rng
-        )
-        total_relevant_in_dataset = int(full_relevant.sum())
-        relevant_in_pool = int(full_relevant[pool_indices].sum())
-        if total_relevant_in_dataset > 0:
-            retrieval_recalls.append(relevant_in_pool / total_relevant_in_dataset)
-
-    metric_keys = per_user_metrics[0].keys()
-    aggregated = {key: float(np.mean([m[key] for m in per_user_metrics])) for key in metric_keys}
     aggregated["mean_latency_ms"] = float(np.mean(latencies_ms))
     aggregated["p95_latency_ms"] = float(np.percentile(latencies_ms, 95))
-    aggregated["candidate_generation_recall"] = float(np.mean(retrieval_recalls)) if retrieval_recalls else None
+    aggregated["candidate_generation_recall"] = float(np.mean(recalls)) if recalls else None
     aggregated["num_test_users_evaluated"] = len(test_ids)
 
     logger.info("Evaluation results: %s", json.dumps(aggregated, indent=2))
