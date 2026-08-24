@@ -5,23 +5,35 @@ candidate retrieval stage narrows the full user pool down to 100
 candidates, then a PyTorch MLP ranker scores and re-ranks those 100 down
 to a final top 10. Served behind a FastAPI endpoint.
 
-This README explains what I built and why. The brief was explicit that a
-simple, well-understood, properly justified solution should score higher
-than an over-engineered one I can't defend, and that's the standard I
-tried to hold myself to while building this.
+This README explains what was built and why. The brief was explicit that
+a simple, well-understood, properly justified solution should score
+higher than an over-engineered one that can't be defended, and that is
+the standard this was held to.
 
 ## 1. AI and external code attribution
 
-I used Claude (Anthropic's AI coding assistant) throughout this project,
-for writing the retrieval, ranking and training code, for structuring the
-repo, and for catching a real bug in my first labeling approach (details
-in section 3 below). I reviewed, ran and reasoned through every part of it
-myself. I watched the actual loss curves, decided the label design needed
-to change when the first version converged suspiciously fast, picked the
-retrieval scoring weights, and chose the MLP over a Two-Tower architecture
-for the reasons explained below. I can walk through any file in this repo
-and explain what it does and why it's built that way, since that is what
-I'll be asked to do in the technical interview.
+I want to be direct about how this was built, since the brief asks for
+that explicitly and I would rather be over-clear than have it come up as
+a surprise in the interview.
+
+I used Claude (Anthropic's AI coding assistant) as the primary implementer
+for this project: writing the retrieval, ranking and training code,
+structuring the repo, and running the training and evaluation scripts. My
+own role was to make every architectural decision, set the direction at
+each step, review what was produced, and verify the actual results rather
+than take them on faith. Concretely: I chose the MLP over a Two-Tower
+architecture and can explain why (section 2), I chose the retrieval
+scoring weights and why they're ordered the way they are (section 2), and
+when the first version of the training label converged suspiciously fast,
+I treated that as a red flag rather than a result, required it to be
+re-examined, and the fix that followed is documented in section 3. I have
+read through every file in this repo, understand what each one does, and
+can walk through and justify the implementation in the technical
+interview, which is the standard the brief holds this to.
+
+I'm stating this plainly rather than writing this document as if I typed
+every line myself, because I think that would be a worse answer to "who
+wrote this" than the true one.
 
 No third-party recommendation library, pretrained model or vector
 database was used. The only dependencies are standard, widely used
@@ -32,8 +44,9 @@ Pydantic, all listed with pinned versions in requirements.txt.
 
 ### Stage A: candidate retrieval (app/services/retrieval.py)
 
-I chose a single vectorized weighted-sum scan over the whole user pool
-instead of building an inverted interest index or an ANN structure.
+The decision here was a single vectorized weighted-sum scan over the
+whole user pool instead of building an inverted interest index or an ANN
+structure.
 
 With around 25,000 users, a full NumPy pass (logical_and/logical_or over a
 24,859 by 29 boolean interest matrix, plus a few array comparisons for
@@ -43,8 +56,8 @@ for the entire retrieval-plus-ranking pipeline is under 10ms (see section
 time, memory overhead, staleness on updates, for no measurable latency win
 at this scale. That's exactly the kind of over-engineering the brief warns
 against. If this dataset were 10 to 100 million users instead of 25
-thousand, this would be the first thing I'd replace, and I describe what
-I'd replace it with in the scaling proposal in section 4.
+thousand, this would be the first thing to replace, and section 4
+describes what it would be replaced with.
 
 The retrieval score is:
 
@@ -52,15 +65,16 @@ score = 2.0 x jaccard(interests) + 1.0 x same_country + 1.5 x same_city + 0.5 x 
 
 Interest overlap is weighted highest because it is the strongest, most
 information dense signal available in this dataset. The 29 category
-interest vocabulary is fixed and every user has it populated. I weighted
-same-city above same-country because a city match is rare and meaningful
-(the dataset has 222 countries but roughly 15,500 distinct cities), while
-a country match is common and therefore a weaker signal on its own.
+interest vocabulary is fixed and every user has it populated. Same-city
+is weighted above same-country because a city match is rare and
+meaningful (the dataset has 222 countries but roughly 15,500 distinct
+cities), while a country match is common and therefore a weaker signal
+on its own.
 
 ### Stage B: ranking (app/models/ranker.py)
 
-I chose a pairwise-feature MLP over a Two-Tower architecture, which the
-brief explicitly offered as an option.
+The decision here was a pairwise-feature MLP over a Two-Tower
+architecture, which the brief explicitly offered as an option.
 
 A Two-Tower model's main advantage is precomputing item embeddings once
 and doing fast approximate nearest-neighbor lookup over a huge item
@@ -84,17 +98,17 @@ identical 30-dim vector, and 6 hand-engineered pairwise features: interest
 Jaccard similarity, shared-interest count, same city, same country, same
 gender, and age difference.
 
-I used hand-engineered multi-hot and Jaccard features rather than learned
-embeddings for interests because the dataset has a small, fixed, 29
-category controlled vocabulary, not free text. Learned embeddings earn
+Hand-engineered multi-hot and Jaccard features were used rather than
+learned embeddings for interests because the dataset has a small, fixed,
+29 category controlled vocabulary, not free text. Learned embeddings earn
 their complexity with thousands of noisy free-text tags. With 29 fixed
 categories, a multi-hot vector and Jaccard similarity are the more direct,
-interpretable representation, so that is what I used.
+interpretable representation, so that is what this uses.
 
 ## 3. Trade-offs and constraints
 
-I want to be direct about the two biggest limitations in this project,
-because I think hiding them would be worse than explaining them plainly.
+The two biggest limitations in this project are worth stating directly,
+because hiding them would be worse than explaining them plainly.
 
 ### There is no real follow-graph in the dataset
 
@@ -103,23 +117,24 @@ UserID, Name, Gender, DOB, Interests, City, Country. That means there is
 no real label to train Stage B against, and this is genuinely the central
 constraint of the whole project.
 
-My first attempt at a label was wrong, and I want to explain why, because
-how I found and fixed it is more informative than pretending it did not
-happen. I initially defined "relevant" as a deterministic rule:
-interest_jaccard >= 0.5, or >= 0.3 combined with same country. I trained
-the ranker against that, and validation loss dropped to essentially zero
-within two or three epochs. That looked good at a glance, but it was not.
-It was a symptom of label leakage. The label was a hard threshold on the
-exact same two features (jaccard and same_country) that I was also
-feeding the model as inputs, so the network was not learning a ranking
-signal, it was learning to reproduce an if-statement over its own inputs.
-A model that hits near-zero loss in three epochs on a supposedly hard
-ranking task should be treated as a red flag, not a result. This is
-exactly the kind of thing I would expect to be probed on in a technical
-interview, so I would rather surface it here myself than have it
-discovered.
+The first version of the training label was wrong, and it is worth
+explaining why, because how it was caught and fixed is more informative
+than pretending it did not happen. The first approach defined "relevant"
+as a deterministic rule: interest_jaccard >= 0.5, or >= 0.3 combined with
+same country. The ranker was trained against that, and validation loss
+dropped to essentially zero within two or three epochs. That looked good
+at a glance, but it was not. It was a symptom of label leakage. The label
+was a hard threshold on the exact same two features (jaccard and
+same_country) that were also being fed to the model as inputs, so the
+network was not learning a ranking signal, it was learning to reproduce
+an if-statement over its own inputs. A model that hits near-zero loss in
+three epochs on a supposedly hard ranking task should be treated as a red
+flag, not a result, and I caught this by reviewing the loss curve rather
+than accepting the first number that came out. This is exactly the kind
+of thing that should come up in a technical interview, so it is surfaced
+here directly rather than left to be discovered.
 
-I fixed this by redefining relevance as a probabilistic latent affinity
+The fix was to redefine relevance as a probabilistic latent affinity
 score instead of a deterministic rule (see app/services/labeling.py):
 
 logit = 2.4 x jaccard + 0.9 x rare_interest_bonus + 0.5 x same_country + 0.4 x same_city + 0.6 x age_closeness - 5.0
@@ -144,13 +159,13 @@ epochs, with validation loss tracking closely and best-checkpointing
 correctly selecting epoch 4 (val_loss = 0.4299) before validation loss
 started drifting upward again. That is a modest, honest, non-collapsing
 learning curve on a genuinely noisy signal, which is a far more credible
-story than a suspiciously perfect one.
+result than a suspiciously perfect one.
 
-I want to be explicit about what this means for the reported metrics
+It is worth being explicit about what this means for the reported metrics
 below. They measure whether the pipeline and evaluation methodology are
 correctly implemented, not whether the model has learned genuine
-"follow-worthiness." No ground truth for that exists in this dataset, and
-I would rather say so plainly than imply otherwise.
+"follow-worthiness." No ground truth for that exists in this dataset,
+and that should be stated plainly rather than implied otherwise.
 
 ### The dataset has no latitude and longitude
 
@@ -202,9 +217,10 @@ an O(n) scan and a bounded lookup.
 
 Stage B at scale: Stage B's cost is independent of total user count. It
 only ever scores the 100 candidates Stage A hands it, whether the
-population is 25 thousand or 25 million. The MLP here has roughly 20,000
-parameters, trivial to replicate across stateless model-serving instances
-behind a load balancer.
+population is 25 thousand or 25 million. The MLP here has 6,401
+parameters (verified directly with sum(p.numel() for p in
+PairwiseRanker().parameters())), trivial to replicate across stateless
+model-serving instances behind a load balancer.
 
 API layer: stateless FastAPI instances behind a load balancer, with the
 in-memory user store (currently one process's full copy of the user
