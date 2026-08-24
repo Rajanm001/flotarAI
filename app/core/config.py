@@ -1,9 +1,11 @@
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="FLOTER_")
+
     project_root: Path = Path(__file__).resolve().parents[2]
     raw_dataset_path: Path = project_root / "data" / "Assessment_TwitterDataset.csv"
     processed_dir: Path = project_root / "data" / "processed"
@@ -20,9 +22,6 @@ class Settings(BaseSettings):
     train_split: float = 0.8
     val_split: float = 0.1
     test_split: float = 0.1
-
-    class Config:
-        env_prefix = "FLOTER_"
 
 
 settings = Settings()

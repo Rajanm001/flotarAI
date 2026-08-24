@@ -1,0 +1,10 @@
+{
+  "precision_at_10": 0.4154,
+  "recall_at_10": 0.2341369910259046,
+  "hit_rate_at_10": 0.984,
+  "ndcg_at_10": 0.7493608682531202,
+  "mean_latency_ms": 9.792182399825833,
+  "p95_latency_ms": 13.342464999004733,
+  "candidate_generation_recall": 0.0395423121937401,
+  "num_test_users_evaluated": 1000
+}
