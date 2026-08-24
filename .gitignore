@@ -20,4 +20,6 @@ FLOTER_AI_LTD_TechnicalInterviewResources.zip
 *.log
 .env
 
+.claude/
+
 README_NOTES_FOR_RAJAN.md
