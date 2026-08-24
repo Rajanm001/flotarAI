@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     project_root: Path = Path(__file__).resolve().parents[2]
     raw_dataset_path: Path = project_root / "data" / "Assessment_TwitterDataset.csv"
     processed_dir: Path = project_root / "data" / "processed"
-    artifacts_dir: Path = project_root / "artifacts"
+    model_output_dir: Path = project_root / "model_output"
 
     model_filename: str = "ranker.pt"
 

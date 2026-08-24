@@ -40,7 +40,7 @@ document: the brief requires the README to be human-written, and I want
 to be precise about what that meant in practice here rather than leave it
 ambiguous. The reasoning in this README, the decisions it explains, and
 the numbers it cites are mine, checked against the actual code and the
-actual files in artifacts/. But I drafted the sentences with Claude's
+actual files in model_output/. But I drafted the sentences with Claude's
 help rather than typing every line from a blank page, the same way I used
 it for the code. If asked directly in the interview whether I typed this
 document character by character myself, the honest answer is no, and I'd
@@ -267,14 +267,14 @@ which of the above to actually build first, rather than guessing.
     per the assessment instructions, see data/README.md)
 
     python -m scripts.prepare_data     builds the 80/10/10 user-id split
-    python -m scripts.train            trains the ranker, saves artifacts/ranker.pt
+    python -m scripts.train            trains the ranker, saves model_output/ranker.pt
     python -m scripts.evaluate         measures precision, recall, NDCG and latency on the test split
     python -m scripts.run_test_user    runs the real API end to end, writes sample_results.csv
 
     uvicorn app.main:app --reload      runs the API locally at http://127.0.0.1:8000
     pytest tests/ -v                   runs the test suite (19 tests)
 
-### Measured results (from the run committed in artifacts/eval_metrics.json)
+### Measured results (from the run committed in model_output/eval_metrics.json)
 
 Precision@10: 0.415
 Recall@10: 0.234
@@ -325,5 +325,5 @@ Country: India
       evaluate.py               Offline evaluation on the held-out test split
       run_test_user.py          Runs the real API end to end, writes sample_results.csv
     tests/                      19 unit and API integration tests
-    artifacts/                  Trained model and eval metrics (model weights gitignored)
+    model_output/                Trained model and eval metrics (model weights gitignored)
     data/                       Dataset (gitignored) and processed split (gitignored)

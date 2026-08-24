@@ -3,12 +3,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-artifacts/*.pt
-artifacts/*.pth
-artifacts/*.joblib
-artifacts/*.json
-!artifacts/.gitkeep
-!artifacts/eval_metrics.json
+model_output/*.pt
+model_output/*.pth
+model_output/*.joblib
+model_output/*.json
+!model_output/.gitkeep
+!model_output/eval_metrics.json
 
 data/Assessment_TwitterDataset.csv
 data/*.pdf

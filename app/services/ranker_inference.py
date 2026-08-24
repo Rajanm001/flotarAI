@@ -15,7 +15,7 @@ from app.services.features import (
 
 
 def load_ranker(path: Path | None = None) -> PairwiseRanker:
-    path = path or (settings.artifacts_dir / settings.model_filename)
+    path = path or (settings.model_output_dir / settings.model_filename)
     # weights_only=True restricts deserialization to plain tensors/primitives
     # (the checkpoint here only ever contains model_state/input_dim/val_loss),
     # so a corrupted or tampered .pt file fails safely instead of executing

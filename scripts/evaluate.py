@@ -2,7 +2,7 @@
 Offline evaluation on the held-out test split: for each test target user,
 runs Stage A retrieval then Stage B ranking, computes ranking metrics against
 the implicit relevance label, and reports candidate-generation recall and
-end-to-end latency. Writes a summary to artifacts/eval_metrics.json.
+end-to-end latency. Writes a summary to model_output/eval_metrics.json.
 """
 from __future__ import annotations
 
@@ -119,8 +119,8 @@ def main(max_test_targets: int = 1000, seed: int = 123) -> None:
 
     logger.info("Evaluation results: %s", json.dumps(aggregated, indent=2))
 
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
-    out_path = settings.artifacts_dir / "eval_metrics.json"
+    settings.model_output_dir.mkdir(parents=True, exist_ok=True)
+    out_path = settings.model_output_dir / "eval_metrics.json"
     out_path.write_text(json.dumps(aggregated, indent=2))
     logger.info("Wrote metrics to %s", out_path)
 

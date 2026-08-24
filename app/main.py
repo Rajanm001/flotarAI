@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
             f"Dataset not found at {settings.raw_dataset_path}. "
             "Place Assessment_TwitterDataset.csv in data/ before starting the API."
         )
-    model_path = settings.artifacts_dir / settings.model_filename
+    model_path = settings.model_output_dir / settings.model_filename
     if not model_path.exists():
         raise RuntimeError(
             f"Trained model not found at {model_path}. Run `python -m scripts.train` first."

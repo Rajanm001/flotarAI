@@ -2,7 +2,7 @@
 Trains the PairwiseRanker on (target, candidate) pairs drawn from each
 target user's Stage A retrieval pool, using the implicit relevance label
 from app.services.labeling. Reports validation metrics each epoch and saves
-the best-validation-loss checkpoint to artifacts/.
+the best-validation-loss checkpoint to model_output/.
 
 Run `python scripts/prepare_data.py` first to generate the train/val/test
 user id split this script reads from data/processed/user_split.json.
@@ -80,8 +80,8 @@ def main(
     criterion = nn.BCEWithLogitsLoss()
 
     best_val_loss = float("inf")
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
-    model_path = settings.artifacts_dir / settings.model_filename
+    settings.model_output_dir.mkdir(parents=True, exist_ok=True)
+    model_path = settings.model_output_dir / settings.model_filename
 
     for epoch in range(1, epochs + 1):
         model.train()
